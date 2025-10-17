@@ -19,22 +19,19 @@ class AccountService(
 
     private val faker = Faker(Locale("ru"))
 
-    suspend fun createAccounts(count: Int): List<AccountDto> {
+    suspend fun createAccounts(count: Int): String {
         val accounts = (START_INDEX..count).map {
             AccountEntity(
-                name = faker.name().fullName(),
+                name = faker.name().lastName(),
                 sum = faker.number().numberBetween(MIN_ACCOUNT_SUM, MAX_ACCOUNT_SUM)
             )
         }
 
         val savedAccounts = accountRepository.saveAll(accounts).toList()
-
-        return savedAccounts.map { entity ->
-            AccountDto(
-                name = entity.name,
-                sum = entity.sum
-            )
-        }
+        
+        val totalSum = savedAccounts.sumOf { it.sum }
+        
+        return "Общая сумма на счетах: $totalSum"
     }
 }
 

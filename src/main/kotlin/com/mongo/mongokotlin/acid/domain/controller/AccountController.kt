@@ -1,6 +1,5 @@
 package com.mongo.mongokotlin.acid.domain.controller
 
-import com.mongo.mongokotlin.acid.domain.dto.AccountDto
 import com.mongo.mongokotlin.acid.domain.service.AccountService
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -16,7 +15,7 @@ class AccountController(
     @PostMapping("/create/{count}")
     suspend fun createAccounts(
         @PathVariable count: Int
-    ): List<AccountDto> {
+    ): String {
         return accountService.createAccounts(count)
     }
 }
