@@ -7,3 +7,9 @@ spring:
 
 vendor:
   timeout-ms: 200
+
+logging:
+  level:
+    org.mongodb.driver: WARN
+    io.netty: WARN
+    com.mongodb: WARN

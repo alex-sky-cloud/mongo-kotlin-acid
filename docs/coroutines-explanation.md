@@ -875,3 +875,250 @@ runCatchingCancellableSuspend { fetchVendor() }
 
 Каждый **уровень вложенности** = **отдельная операция** с её собственной обработкой ошибок.
 
+---
+
+## Обработка сетевых ошибок MongoDB (Netty Connection Pool)
+
+### Почему некоторые ошибки не попадают в catch-блоки
+
+Иногда в консоли можно увидеть stacktrace от MongoDB/Netty:
+
+```
+Caused by: java.io.IOException: The connection to the server was closed
+	at com.mongodb.internal.connection.netty.NettyStream$OpenChannelFutureListener...
+	at io.netty.channel.AbstractChannel$AbstractUnsafe.close...
+```
+
+Но при этом **ваш код не ловит эту ошибку** в catch-блоках, и операция **завершается успешно**.
+
+### Причина: Connection Pool с автоматическим переподключением
+
+MongoDB драйвер использует **пул соединений** с механизмом **автоматического восстановления**.
+
+#### Архитектура взаимодействия (PlantUML)
+
+```plantuml
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+
+participant "Ваш код\n(SubscriptionUpdateService)" as Code
+participant "MongoDB Driver\n(Connection Pool)" as Driver
+participant "Netty\n(Transport Layer)" as Netty
+participant "MongoDB Server" as Mongo
+
+== Нормальная работа ==
+Code -> Driver: saveAll(entities)
+Driver -> Netty: Использовать\nсоединение #3 из пула
+Netty -> Mongo: TCP: INSERT/UPDATE
+Mongo --> Netty: OK
+Netty --> Driver: Result
+Driver --> Code: ✅ Success
+
+== Сценарий с разрывом соединения ==
+Code -> Driver: saveAll(entities)
+Driver -> Netty: Использовать\nсоединение #3 из пула
+Netty -[#red]x Mongo: ❌ Connection closed\n(сервер перезапущен)
+
+note over Netty #FFE6E6
+  IOException: Connection closed
+  Логируется в консоль
+  (stacktrace от Netty)
+end note
+
+Netty -> Driver: Connection failed
+Driver -> Driver: Помечаем соединение #3\nкак неактивное
+
+note over Driver #E6F3FF
+  Connection Pool:
+  #1 ✅ active
+  #2 ✅ active
+  #3 ❌ closed (remove)
+  #4 ✅ active
+  #5 ✅ active
+end note
+
+Driver -> Netty: Создать новое соединение #6
+Netty -> Mongo: TCP: Handshake
+Mongo --> Netty: Connected
+Netty --> Driver: Connection #6 ready
+
+Driver -> Netty: Повтор запроса\nна соединении #6
+Netty -> Mongo: TCP: INSERT/UPDATE
+Mongo --> Netty: OK
+Netty --> Driver: Result
+Driver --> Code: ✅ Success\n(переподключение прозрачное)
+
+note over Code #E6FFE6
+  Ваш код получает успех!
+  Ошибка Netty была
+  обработана драйвером
+end note
+
+@enduml
+```
+
+### Пошаговое объяснение
+
+#### 1. Начальное состояние
+
+MongoDB драйвер держит **пул открытых соединений** (по умолчанию 5-10):
+
+```
+Connection Pool:
+├─ Connection #1 ✅ active (к MongoDB primary)
+├─ Connection #2 ✅ active
+├─ Connection #3 ✅ active
+├─ Connection #4 ✅ active
+└─ Connection #5 ✅ active
+```
+
+#### 2. Ваш код вызывает saveAll()
+
+```kotlin
+runCatchingCancellableSuspend {
+    subscriptionRepository.saveAll(entitiesToUpdate).collect()
+}.onSuccess { ... }
+  .onFailure { ... } // ❓ Почему сюда не попадаем?
+```
+
+Драйвер выбирает соединение #3 из пула.
+
+#### 3. Соединение разрывается (внешняя причина)
+
+**Возможные причины:**
+- MongoDB сервер перезапущен
+- Сетевой сбой (firewall, роутер)
+- Истекло время keep-alive
+- Сервер закрыл idle соединение
+
+**Что происходит:**
+
+```
+Netty Thread (фоновый поток):
+└─ Обнаруживает: TCP connection closed
+   └─ Логирует: IOException в консоль (stacktrace)
+   └─ Уведомляет драйвер: "Connection #3 dead"
+```
+
+**Важно:** Это происходит в **фоновом потоке Netty**, не в вашей корутине!
+
+#### 4. Драйвер автоматически восстанавливается
+
+```
+MongoDB Driver:
+1. Помечает Connection #3 как неактивное
+2. Удаляет из пула
+3. Создает новое Connection #6
+4. Добавляет в пул
+5. Повторяет операцию на новом соединении
+6. Возвращает успех вашему коду ✅
+```
+
+#### 5. Ваш код получает успешный результат
+
+```kotlin
+runCatchingCancellableSuspend {
+    subscriptionRepository.saveAll(...).collect()
+}.onSuccess {
+    log.info("Успешно!") // ← Попадаем сюда
+}
+```
+
+### Почему ошибка не ловится в вашем коде
+
+| Аспект | Объяснение |
+|--------|-----------|
+| **Где произошла ошибка** | Внутри Netty (транспортный уровень) |
+| **Когда произошла** | Асинхронно, в фоновом потоке Netty |
+| **Кто обработал** | MongoDB Driver автоматически |
+| **Что получил ваш код** | Успешный результат после переподключения |
+| **Почему stacktrace в консоли** | Netty логирует внутренние события |
+
+### Когда ВЫ увидите ошибку
+
+Ваш catch-блок сработает только если:
+
+1. **Все попытки переподключения провалились**
+   ```
+   MongoDB недоступен > 30 секунд
+   → MongoTimeoutException → ваш catch
+   ```
+
+2. **Ошибка бизнес-логики**
+   ```
+   Duplicate key constraint
+   → DuplicateKeyException → ваш catch
+   ```
+
+3. **Ошибка валидации**
+   ```
+   Invalid document structure
+   → ValidationException → ваш catch
+   ```
+
+### Настройка логирования
+
+Чтобы не видеть эти stacktrace в консоли (они не критичны):
+
+```yaml
+logging:
+  level:
+    org.mongodb.driver: WARN    # Скрывает DEBUG от драйвера
+    io.netty: WARN              # Скрывает stacktrace от Netty
+    com.mongodb: WARN           # Скрывает внутренние логи MongoDB
+```
+
+**Эффект:**
+- ✅ Реальные ошибки (операция провалилась) все равно попадут в ваш catch
+- ✅ Спам от внутренних переподключений исчезнет из консоли
+- ✅ Production-логи станут чище
+
+### Как проверить реальную ошибку БД
+
+#### Способ 1: Остановить MongoDB
+
+```bash
+docker stop mongodb
+```
+
+Через 30 секунд ваш catch поймает `MongoTimeoutException`.
+
+#### Способ 2: Имитировать duplicate key
+
+В `VendorService` добавлена логика:
+
+```kotlin
+// 5% вероятность: вендор вернет дубликат publicId
+if (Random.nextInt(100) < 5) {
+    val duplicate = result.first().copy()
+    result.add(duplicate)
+}
+```
+
+Но код **защищен** через `distinctBy { it.publicId }`, поэтому ошибки не будет.
+
+#### Способ 3: Создать невалидный документ
+
+Временно убрать валидацию и попытаться сохранить `null` в обязательное поле.
+
+### Итого
+
+**Connection Pool работает как "самовосстанавливающаяся" прослойка:**
+
+```
+Ваш код
+   ↓
+  [try-catch]  ← Ловит только "неисправимые" ошибки
+   ↓
+MongoDB Driver + Connection Pool
+   ↓
+  [auto-retry] ← Обрабатывает сетевые сбои
+   ↓
+Netty (TCP)
+   ↓
+MongoDB Server
+```
+
+Это **нормальное поведение** production-систем — клиентский код не должен заботиться о временных сетевых сбоях.
+

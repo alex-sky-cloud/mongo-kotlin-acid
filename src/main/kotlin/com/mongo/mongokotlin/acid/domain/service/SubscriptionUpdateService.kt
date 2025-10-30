@@ -31,22 +31,32 @@ class SubscriptionUpdateService(
         val subscriptionMap = subscriptions.associateBy { it.publicId }
         // Запускаем фоновое обновление (клиент не ждет, получает данные из БД сразу)
         payCoroutineScope.launch {
-            // Пакетный запрос к вендору по cus с таймаутом 200мс
-            val vendorResult = runCatchingCancellableSuspend {
-                withTimeout(vendorProperties.timeout) {
+            // Пакетный запрос к вендору по cus с таймаутом
+            try {
+                val vendorDtos = withTimeout(vendorProperties.timeout) {
                     vendorService.fetchVendorDataForCus(cus, subscriptionMap.keys)
                 }
-            }
-            
-            vendorResult.onSuccess { vendorDtos ->
-                // Сопоставляем по publicId и обновляем
-                val entitiesToUpdate = vendorDtos.mapNotNull { vendorDto ->
-                    subscriptionMap[vendorDto.publicId]?.apply {
-                        mapper.updateEntityWithVendorData(this, vendorDto)
+                
+                // Успешно получили данные от вендора
+                // Сопоставляем по publicId и обновляем (убираем дубликаты)
+                val entitiesToUpdate = vendorDtos
+                    .distinctBy { it.publicId }  // Убираем дубликаты по publicId
+                    .mapNotNull { vendorDto ->
+                        val entity = subscriptionMap[vendorDto.publicId]
+                        if (entity == null) {
+                            log.warn("Получен vendorDto для несуществующего publicId: {}", vendorDto.publicId)
+                        }
+                        entity?.apply {
+                            mapper.updateEntityWithVendorData(this, vendorDto)
+                        }
                     }
-                }
+                
                 if (entitiesToUpdate.isNotEmpty()) {
                     runCatchingCancellableSuspend {
+                        // Имитация БД ошибки: если первая entity имеет vendorStatus = "CORRUPTED"
+                        if (entitiesToUpdate.first().vendorStatus == "CORRUPTED") {
+                            throw IllegalStateException("⚠️ Имитация БД ошибки: невозможно сохранить CORRUPTED status")
+                        }
                         subscriptionRepository.saveAll(entitiesToUpdate).collect()
                     }.onSuccess {
                         log.info("Пакетно обновлено {} подписок в БД", entitiesToUpdate.size)
@@ -54,11 +64,13 @@ class SubscriptionUpdateService(
                         log.error("Ошибка сохранения подписок в БД для cus: {}", cus, error)
                     }
                 }
-            }.onFailure { error ->
-                when (error) {
-                    is TimeoutCancellationException -> log.error("Timeout пакетного запроса к вендору для cus: {}", cus)
-                    else -> log.error("Ошибка пакетного запроса к вендору для cus: {}", cus, error)
-                }
+                
+            } catch (e: TimeoutCancellationException) {
+                log.error("Timeout пакетного запроса к вендору для cus: {}", cus)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.error("Ошибка пакетного запроса к вендору для cus: {}", cus, e)
             }
         }
         // Возвращаем список подписок из БД (без ожидания фонового обновления)
