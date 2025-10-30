@@ -1122,3 +1122,197 @@ MongoDB Server
 
 Это **нормальное поведение** production-систем — клиентский код не должен заботиться о временных сетевых сбоях.
 
+---
+
+## Labeled returns в Kotlin (return@label)
+
+### Что такое labeled return
+
+В Kotlin, когда вы используете `return` внутри лямбды, по умолчанию он **выходит из всей функции**, а не только из лямбды. Чтобы вернуться только **из лямбды**, используется **labeled return** с символом `@`.
+
+### Проблема без меток
+
+```kotlin
+fun processItems(): List<String> {
+    val items = listOf(1, 2, 3, 4, 5)
+    
+    return items.map { item ->
+        if (item > 3) {
+            return emptyList()  // ❌ Выходит из ВСЕЙ функции processItems
+        }
+        "Item $item"
+    }
+}
+
+// Результат: emptyList(), как только встретили item > 3
+```
+
+**Проблема:** `return` выходит из **функции `processItems`**, а не из лямбды `map`.
+
+### Решение: labeled return
+
+```kotlin
+fun processItems(): List<String> {
+    val items = listOf(1, 2, 3, 4, 5)
+    
+    return items.map { item ->
+        if (item > 3) {
+            return@map ""  // ✅ Выходит только из лямбды map
+        }
+        "Item $item"
+    }
+}
+
+// Результат: ["Item 1", "Item 2", "Item 3", "", ""]
+```
+
+**Решение:** `return@map` возвращает значение **только из лямбды `map`**.
+
+### Синтаксис
+
+```kotlin
+return@label value
+```
+
+- `@label` — метка, указывающая на контекст (обычно имя функции высшего порядка)
+- `value` — возвращаемое значение из лямбды
+
+### Пример из проекта
+
+```kotlin
+val entitiesToUpdate = vendorDtos
+    .mapNotNull { vendorDto ->
+        val entity = subscriptionMap[vendorDto.publicId]
+        if (entity == null) {
+            return@mapNotNull null  // ← Возвращаем null из лямбды mapNotNull
+        }
+        entity.apply {
+            mapper.updateEntityWithVendorData(this, vendorDto)
+        }
+    }
+```
+
+**Что происходит:**
+
+1. `mapNotNull` проходит по каждому `vendorDto`
+2. Если `entity == null`, `return@mapNotNull null` возвращает `null` **из текущей итерации лямбды**
+3. `mapNotNull` **автоматически фильтрует** этот `null`
+4. Функция `processItems` продолжает выполнение для следующих элементов
+5. В `entitiesToUpdate` попадают только **ненулевые** значения
+
+### Типы меток
+
+#### 1. Неявная метка (имя функции)
+
+```kotlin
+list.forEach { item ->
+    if (item < 0) return@forEach  // Метка = имя функции
+}
+```
+
+#### 2. Явная метка (custom)
+
+```kotlin
+list.forEach outerLoop@ { item ->
+    if (item < 0) return@outerLoop  // Метка = custom имя
+}
+```
+
+#### 3. Анонимная функция (без метки)
+
+```kotlin
+list.forEach(fun(item) {
+    if (item < 0) return  // Выходит только из анонимной функции
+})
+```
+
+### Сравнение вариантов
+
+| Вариант | Код | Что делает |
+|---------|-----|-----------|
+| Обычный return | `return value` | Выходит из **всей функции** |
+| Labeled return | `return@map value` | Выходит из **лямбды map** |
+| Анонимная функция | `map(fun(x) { return value })` | Выходит из **анонимной функции** |
+
+### Реальный пример с вложенными лямбдами
+
+```kotlin
+fun complexProcessing(): List<String> {
+    val result = mutableListOf<String>()
+    
+    listOf(1, 2, 3).forEach outer@ { i ->
+        listOf("a", "b", "c").forEach inner@ { j ->
+            if (j == "b") {
+                return@inner  // Пропускаем только "b", продолжаем outer
+            }
+            if (i == 2) {
+                return@outer  // Пропускаем всю итерацию i=2
+            }
+            result.add("$i$j")
+        }
+    }
+    
+    return result
+}
+
+// Результат: ["1a", "1c", "3a", "3c"]
+// i=2 полностью пропущено (return@outer)
+// j="b" пропущено в каждой итерации (return@inner)
+```
+
+### Почему это важно в проекте
+
+В нашем коде:
+
+```kotlin
+.mapNotNull { vendorDto ->
+    val entity = subscriptionMap[vendorDto.publicId]
+    if (entity == null) {
+        log.warn("...")
+        return@mapNotNull null  // Пропускаем эту итерацию
+    }
+    // Продолжаем обработку для следующих vendorDto
+    entity.apply { ... }
+}
+```
+
+**Без `@mapNotNull`:**
+```kotlin
+return null  // ❌ Вылет из всей функции updateSubscriptionsWithVendorData
+             // Клиент получит пустой ответ!
+```
+
+**С `@mapNotNull`:**
+```kotlin
+return@mapNotNull null  // ✅ Пропускаем только текущий vendorDto
+                        // Обработка продолжается для остальных
+```
+
+### Break vs Return в циклах
+
+**Обычный цикл:**
+```kotlin
+for (item in items) {
+    if (item > 5) break  // Выходит из цикла
+}
+```
+
+**forEach с labeled return:**
+```kotlin
+items.forEach { item ->
+    if (item > 5) return@forEach  // Эквивалент continue (пропускает итерацию)
+}
+```
+
+**Важно:** В `forEach` нет прямого `break`. Для выхода из всего `forEach` нужно использовать обычный цикл или `run` с labeled return.
+
+### Итого
+
+**Labeled returns (`return@label`) позволяют:**
+- ✅ Возвращать значения из лямбд, не выходя из всей функции
+- ✅ Эмулировать `continue` в функциях высшего порядка (`forEach`, `map`, и т.д.)
+- ✅ Делать код более явным и понятным
+- ✅ Избегать неожиданного выхода из функций
+
+**Правило:** Используйте `return@functionName` внутри лямбд, когда хотите вернуться **только из лямбды**, а не из всей функции.
+

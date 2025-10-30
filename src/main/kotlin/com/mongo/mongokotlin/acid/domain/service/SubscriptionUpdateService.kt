@@ -44,9 +44,13 @@ class SubscriptionUpdateService(
                     .mapNotNull { vendorDto ->
                         val entity = subscriptionMap[vendorDto.publicId]
                         if (entity == null) {
-                            log.warn("Получен vendorDto для несуществующего publicId: {}", vendorDto.publicId)
+                            log.warn("Получен vendorDto для несуществующего publicId: {}, пропускаем обновление", vendorDto.publicId)
+                            // return@mapNotNull явно указывает, что возвращаем null из лямбды mapNotNull
+                            // @ указывает на метку (имя функции), из которой делаем return
+                            // mapNotNull автоматически отфильтрует этот null из результирующего списка
+                            return@mapNotNull null
                         }
-                        entity?.apply {
+                        entity.apply {
                             mapper.updateEntityWithVendorData(this, vendorDto)
                         }
                     }
