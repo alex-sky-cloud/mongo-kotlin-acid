@@ -1,6 +1,9 @@
 spring:
-    application:
-        name: mongo-kotlin-acid
-    data:
-        mongodb:
-            uri: mongodb://root:root@localhost:27017/bank?authSource=admin
+  application:
+    name: mongo-kotlin-acid
+  data:
+    mongodb:
+      uri: mongodb://root:root@localhost:27017/bank?authSource=admin
+
+vendor:
+  timeout-ms: 200

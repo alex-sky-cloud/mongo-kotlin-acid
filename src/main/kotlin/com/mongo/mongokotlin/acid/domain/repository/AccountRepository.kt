@@ -6,6 +6,9 @@ import org.springframework.data.repository.kotlin.CoroutineCrudRepository
 import org.springframework.stereotype.Repository
 
 @Repository
-interface AccountRepository : CoroutineCrudRepository<AccountEntity, ObjectId>
+interface AccountRepository : CoroutineCrudRepository<AccountEntity, ObjectId> {
+    
+    suspend fun findByName(name: String): AccountEntity?
+}
 
 
