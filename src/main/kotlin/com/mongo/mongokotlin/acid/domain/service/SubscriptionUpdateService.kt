@@ -53,14 +53,15 @@ class SubscriptionUpdateService(
                 
                 if (entitiesToUpdate.isNotEmpty()) {
                     runCatchingCancellableSuspend {
-                        // Имитация БД ошибки: если первая entity имеет vendorStatus = "CORRUPTED"
-                        if (entitiesToUpdate.first().vendorStatus == "CORRUPTED") {
-                            throw IllegalStateException("⚠️ Имитация БД ошибки: невозможно сохранить CORRUPTED status")
-                        }
                         subscriptionRepository.saveAll(entitiesToUpdate).collect()
                     }.onSuccess {
                         log.info("Пакетно обновлено {} подписок в БД", entitiesToUpdate.size)
                     }.onFailure { error ->
+                        // Этот блок сработает при реальных ошибках БД:
+                        // - MongoTimeoutException (БД недоступна)
+                        // - MongoSocketException (сетевой сбой)
+                        // - MongoWriteException (ошибка валидации на стороне MongoDB)
+                        // Для теста: остановите MongoDB (docker stop mongodb)
                         log.error("Ошибка сохранения подписок в БД для cus: {}", cus, error)
                     }
                 }

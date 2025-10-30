@@ -66,11 +66,10 @@ class VendorService {
      * Пакетный запрос к вендору с имитацией различных сценариев.
      * 
      * Сценарии (вероятности):
-     * - 65% - быстрый успешный ответ (50-200мс)
+     * - 80% - быстрый успешный ответ (50-200мс)
      * - 20% - медленный ответ (1000мс, вызовет таймаут)
      * - 5%  - возврат дубликата publicId (обрабатывается distinctBy)
      * - 5%  - возврат несуществующего publicId (не обновится)
-     * - 5%  - возврат null в обязательном поле (вызовет ошибку БД)
      */
     suspend fun fetchVendorDataForCus(cus: String, publicIds: Collection<UUID>): List<SubscriptionVendorDto> {
         val shouldDelay = Random.nextInt(100) < 20
@@ -97,13 +96,6 @@ class VendorService {
             val fakePublicId = UUID.randomUUID()
             result.add(generateVendorData(fakePublicId))
             log.warn("⚠️ Имитация: вендор вернул несуществующий publicId: {}", fakePublicId)
-        }
-        
-        // 5% вероятность: возвращаем CORRUPTED status (имитация некорректных данных от вендора)
-        if (result.isNotEmpty() && Random.nextInt(100) < 5) {
-            val corruptedData = result.first().copy(vendorStatus = "CORRUPTED")
-            result[0] = corruptedData
-            log.warn("⚠️ Имитация: вендор вернул CORRUPTED status для publicId: {}", corruptedData.publicId)
         }
         
         return result
