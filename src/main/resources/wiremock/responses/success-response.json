@@ -1,0 +1,37 @@
+{
+  "subscriptions": [
+    {
+      "subscriptionId": "sub-001",
+      "customerId": "customer-success",
+      "productId": "premium-monthly",
+      "status": "ACTIVE",
+      "startDate": "2024-01-01T00:00:00",
+      "endDate": "2025-01-01T00:00:00",
+      "price": 29.99,
+      "billingPeriod": "MONTHLY"
+    },
+    {
+      "subscriptionId": "sub-002",
+      "customerId": "customer-success",
+      "productId": "basic-yearly",
+      "status": "ACTIVE",
+      "startDate": "2024-06-15T00:00:00",
+      "endDate": "2025-06-15T00:00:00",
+      "price": 99.99,
+      "billingPeriod": "YEARLY"
+    },
+    {
+      "subscriptionId": "sub-003",
+      "customerId": "customer-success",
+      "productId": "enterprise-monthly",
+      "status": "PENDING",
+      "startDate": "2024-11-01T00:00:00",
+      "endDate": "2024-12-01T00:00:00",
+      "price": 199.99,
+      "billingPeriod": "MONTHLY"
+    }
+  ],
+  "total": 3,
+  "message": "Подписки успешно получены"
+}
+

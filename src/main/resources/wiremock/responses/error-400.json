@@ -1,0 +1,6 @@
+{
+  "errorCode": 400,
+  "errorMessage": "Bad Request",
+  "details": "Invalid customerId format"
+}
+

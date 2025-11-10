@@ -1,0 +1,6 @@
+{
+  "errorCode": 500,
+  "errorMessage": "Internal Server Error",
+  "details": "Service unavailable"
+}
+
