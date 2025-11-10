@@ -28,6 +28,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
     implementation("net.datafaker:datafaker:2.5.2")
     implementation("org.yaml:snakeyaml:2.2")
+    implementation("org.wiremock:wiremock-standalone:3.3.1")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.projectreactor:reactor-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

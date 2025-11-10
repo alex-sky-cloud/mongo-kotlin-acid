@@ -8,8 +8,24 @@ spring:
 vendor:
   timeout-ms: 200
 
+# Настройки внешнего сервиса подписок (WireMock)
+external:
+  subscription:
+    service:
+      url: http://localhost:8090
+
 logging:
   level:
     org.mongodb.driver: WARN
     io.netty: WARN
     com.mongodb: WARN
+
+# Cloud Messages - Сообщения об ошибках
+error.subscription.fetch.invalid.request: "Некорректный запрос при получении данных о подписках для пользователя: {customerId}"
+error.subscription.fetch.forbidden: "Подписки недоступны для текущего пользователя: {customerId}. Доступ запрещен."
+error.subscription.fetch.customer.not.found: "Клиент с идентификатором {customerId} не найден во внешнем сервисе подписок"
+error.subscription.fetch.temporarily.unavailable: "Подписки для пользователя {customerId} временно недоступны. Повторите запрос позже."
+error.subscription.fetch.external.service.error: "Внутренняя ошибка внешнего сервиса при получении подписок для пользователя: {customerId}"
+error.subscription.fetch.unknown.error: "Неизвестная ошибка внешнего сервиса при получении подписок для пользователя: {customerId}"
+error.auth.missing.user.id.header: "Отсутствует обязательный заголовок: {headerName} для получения подписок"
+error.unexpected: "Непредвиденная ошибка при выполнении операции для пользователя: {customerId}. {details}"
