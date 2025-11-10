@@ -9,7 +9,8 @@
 5. [Sequence диаграммы](#sequence-диаграммы)
 6. [ConfigurationProperties](#configurationproperties)
 7. [Добавление новой ошибки](#добавление-новой-ошибки)
-8. [Преимущества подхода](#преимущества-подхода)
+8. [Интеграционные тесты](#интеграционные-тесты)
+9. [Преимущества подхода](#преимущества-подхода)
 
 ---
 
@@ -233,67 +234,91 @@ stop
 skinparam backgroundColor #FEFEFE
 skinparam componentStyle rectangle
 
-package "Configuration Layer" {
-  [application.yml] as yml
-  [ErrorStrategiesProperties\n@ConfigurationProperties] as props
-  [PropertiesConfig\n@Configuration] as pconf
-  [ErrorStrategyConfig\n@Configuration] as conf
-  
-  yml -down-> props : читается
-  pconf -down-> props : активирует
-}
-
-package "Strategy Layer" {
-  interface "ErrorHandlingStrategy\n<<interface>>" as iface
-  
-  [BadRequestErrorStrategy\n@Component] as s400
-  [ForbiddenErrorStrategy\n@Component] as s403
-  [NotFoundErrorStrategy\n@Component] as s404
-  [ConflictErrorStrategy\n@Component] as s409
-  [InternalServerErrorStrategy\n@Component] as s500
-  
-  iface <|.. s400
-  iface <|.. s403
-  iface <|.. s404
-  iface <|.. s409
-  iface <|.. s500
-  
-  props -down-> s400 : инжектится
-  props -down-> s403 : инжектится
-  props -down-> s404 : инжектится
-  props -down-> s409 : инжектится
-  props -down-> s500 : инжектится
-}
-
-package "Registry Layer" {
-  [Map<Int, Strategy>\n@Bean] as map
-  
-  conf -down-> map : создаёт
-  s400 -up-> map : регистрируется
-  s403 -up-> map : регистрируется
-  s404 -up-> map : регистрируется
-  s409 -up-> map : регистрируется
-  s500 -up-> map : регистрируется
-}
-
-package "Service Layer" {
-  [SubscriptionFetchService\n@Service] as service
-  
-  map -down-> service : инжектится
-}
-
+component "application.yml" as yml
 note right of yml
   error:
     strategies:
       badRequest: 400
       forbidden: 403
+      notFound: 404
+      conflict: 409
+      internalServerError: 500
 end note
 
+yml -down-> props
+
+component "ErrorStrategiesProperties\n<<@ConfigurationProperties>>" as props
+note right of props
+  Spring читает yml
+  и биндит значения
+end note
+
+props -down-> pconf
+
+component "PropertiesConfig\n<<@Configuration>>" as pconf
+
+pconf -down-> iface
+
+component "ErrorHandlingStrategy\n<<interface>>" as iface
+note right of iface
+  Интерфейс стратегии:
+  - getStatusCode()
+  - buildException()
+end note
+
+iface -down-> s400
+
+component "BadRequestErrorStrategy\n<<@Component>>" as s400
+component "ForbiddenErrorStrategy\n<<@Component>>" as s403
+component "NotFoundErrorStrategy\n<<@Component>>" as s404
+component "ConflictErrorStrategy\n<<@Component>>" as s409
+component "InternalServerErrorStrategy\n<<@Component>>" as s500
+
+props .> s400
+props .> s403
+props .> s404
+props .> s409
+props .> s500
+
+s400 -down-> conf
+s403 -down-> conf
+s404 -down-> conf
+s409 -down-> conf
+s500 -down-> conf
+
+component "ErrorStrategyConfig\n<<@Configuration>>" as conf
+note right of conf
+  Собирает все стратегии
+  в Map<Int, Strategy>
+end note
+
+conf -down-> map
+
+component "Map<Int, Strategy>\n<<@Bean>>" as map
 note right of map
-  Spring IoC автоматически:
-  1. Находит все @Component
+  Spring IoC:
+  1. Находит @Component
   2. Собирает в List
-  3. Config преобразует в Map
+  3. Config -> Map
+  
+  Map содержит:
+  400 -> BadRequest
+  403 -> Forbidden
+  404 -> NotFound
+  409 -> Conflict
+  500 -> InternalServer
+end note
+
+map -down-> service
+
+component "SubscriptionFetchService\n<<@Service>>" as service
+note right of service
+  Использует Map:
+  
+  val strategy = 
+    errorStrategyMap[code]
+  
+  strategy.buildException()
 end note
 
 @enduml
@@ -776,7 +801,243 @@ end note
 
 ---
 
+## Интеграционные тесты
+
+### Зачем нужны интеграционные тесты?
+
+Интеграционные тесты подтверждают что **Spring IoC корректно собирает все компоненты** без необходимости запуска всего приложения.
+
+### Минимальный контекст
+
+**src/test/resources/application.yml:**
+```yaml
+error:
+  strategies:
+    badRequest: 400
+    forbidden: 403
+    notFound: 404
+    conflict: 409
+    internalServerError: 500
+```
+
+**ErrorStrategyIntegrationTest.kt:**
+```kotlin
+@SpringBootTest(classes = [ErrorStrategyIntegrationTest.TestConfig::class])
+class ErrorStrategyIntegrationTest {
+    
+    @Configuration
+    @EnableConfigurationProperties(ErrorStrategiesProperties::class)
+    @ComponentScan(basePackages = ["com.mongo.mongokotlin.acid.exception.strategy.impl"])
+    class TestConfig : ErrorStrategyConfig()
+    
+    @Autowired
+    private lateinit var errorStrategyMap: Map<Int, ErrorHandlingStrategy>
+    
+    @Autowired
+    private lateinit var properties: ErrorStrategiesProperties
+}
+```
+
+**Загружаются только:**
+- ✅ ErrorStrategiesProperties
+- ✅ ErrorStrategyConfig
+- ✅ Все стратегии (@Component)
+
+**НЕ загружаются:**
+- ❌ MongoDB, WireMock
+- ❌ Controllers, Services
+- ❌ Полный ApplicationContext
+
+### Что тестируется
+
+```plantuml
+@startuml
+skinparam backgroundColor #FEFEFE
+
+rectangle "Интеграционные тесты" {
+  
+  card "@ConfigurationProperties биндинг" as test1
+  note right of test1
+    Spring читает test properties
+    Биндит к ErrorStrategiesProperties
+    Проверяем значения
+  end note
+  
+  card "Создание бинов стратегий" as test2
+  note right of test2
+    Spring находит @Component
+    Создаёт бины с инжекцией Properties
+    Проверяем что все созданы
+  end note
+  
+  card "Автоматическая регистрация в Map" as test3
+  note right of test3
+    ErrorStrategyConfig собирает List
+    Преобразует в Map<Int, Strategy>
+    Проверяем размер и ключи
+  end note
+  
+  card "Построение BusinessException" as test4
+  note right of test4
+    Каждая стратегия строит исключение
+    Проверяем LogicErrorCode
+    Проверяем HttpStatus
+    Проверяем параметры
+  end note
+  
+  test1 -down-> test2
+  test2 -down-> test3
+  test3 -down-> test4
+}
+
+@enduml
+```
+
+### Примеры тестов
+
+#### Тест 1: Биндинг Properties
+
+```kotlin
+@Test
+fun `должен загрузить ErrorStrategiesProperties из тестовых properties`() {
+    // Given & When - Spring загружает конфигурацию
+    
+    // Then
+    assertNotNull(properties)
+    assertEquals(400, properties.badRequest)
+    assertEquals(403, properties.forbidden)
+    assertEquals(404, properties.notFound)
+}
+```
+
+#### Тест 2: Создание Map bean
+
+```kotlin
+@Test
+fun `должен создать Map bean со всеми стратегиями`() {
+    // Given & When - Spring создаёт Map через ErrorStrategyConfig
+    
+    // Then
+    assertNotNull(errorStrategyMap)
+    assertEquals(5, errorStrategyMap.size)
+    
+    assertTrue(errorStrategyMap.containsKey(400))
+    assertTrue(errorStrategyMap.containsKey(403))
+    assertTrue(errorStrategyMap.containsKey(404))
+}
+```
+
+#### Тест 3: Построение исключения
+
+```kotlin
+@Test
+fun `BadRequestErrorStrategy должна строить правильное исключение`() {
+    // Given
+    val cause = RuntimeException("Test error")
+    val params = mapOf("customerId" to "test-customer-123")
+    
+    // When
+    val exception = badRequestStrategy.buildException(cause, params)
+    
+    // Then
+    assertNotNull(exception)
+    assertEquals(LogicErrorCode.INVALID_REQUEST_FETCH_SUBSCRIPTIONS, exception.errorCode)
+    assertEquals(HttpStatus.BAD_REQUEST, exception.httpCode)
+    assertEquals("test-customer-123", exception.params["customerId"])
+}
+```
+
+#### Тест 4: Автоматическая регистрация
+
+```kotlin
+@Test
+fun `Spring IoC должен автоматически зарегистрировать все стратегии в Map`() {
+    // Given - Spring создаёт контекст
+    
+    // When
+    val registeredStrategies = errorStrategyMap.values
+    
+    // Then
+    assertEquals(5, registeredStrategies.size)
+    
+    val strategyClasses = registeredStrategies.map { it::class }
+    assertTrue(strategyClasses.contains(BadRequestErrorStrategy::class))
+    assertTrue(strategyClasses.contains(ForbiddenErrorStrategy::class))
+}
+```
+
+### Запуск тестов
+
+```bash
+# Все тесты
+./gradlew test
+
+# Только интеграционные тесты стратегий
+./gradlew test --tests ErrorStrategyIntegrationTest
+
+# С подробным выводом
+./gradlew test --tests ErrorStrategyIntegrationTest --info
+```
+
+### Что подтверждают тесты
+
+| Аспект | Что проверяется |
+|--------|-----------------|
+| **IoC** | Spring находит все @Component и создаёт бины |
+| **DI** | Properties корректно инжектятся в конструкторы |
+| **Configuration** | @ConfigurationProperties правильно биндит значения |
+| **Strategy Pattern** | Все стратегии реализуют интерфейс корректно |
+| **Map Creation** | Config собирает стратегии в Map автоматически |
+
+---
+
 ## Преимущества подхода
+
+### Сравнение: До и После
+
+**❌ До (when с 60+ строками):**
+```kotlin
+when (statusCode) {
+    400 -> BusinessException.builder()
+        .errorCode(LogicErrorCode.INVALID_REQUEST)
+        .httpCode(HttpStatus.BAD_REQUEST)
+        .params("customerId" to customerId)
+        .build()
+    
+    403 -> BusinessException.builder()
+        .errorCode(LogicErrorCode.FORBIDDEN)
+        .httpCode(HttpStatus.FORBIDDEN)
+        .params("customerId" to customerId)
+        .build()
+    
+    // ... еще 40+ строк
+}
+```
+
+**Проблемы:**
+- Огромный метод
+- Нарушение SRP
+- Сложно добавлять ошибки
+- Дублирование кода
+- Сложно тестировать
+
+**✅ После (Strategy + IoC):**
+```kotlin
+val strategy = errorStrategyMap[statusCode]
+return if (strategy != null) {
+    strategy.buildException(cause, params)
+} else {
+    // дефолтная ошибка
+}
+```
+
+**Преимущества:**
+- 5 строк кода
+- Соблюдение SRP
+- Легко добавлять (новый класс)
+- Нет дублирования
+- Легко тестировать
+- Spring IoC автоматизация
 
 ### Метрики
 
