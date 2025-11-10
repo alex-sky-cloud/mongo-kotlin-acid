@@ -20,6 +20,15 @@ logging:
     io.netty: WARN
     com.mongodb: WARN
 
+# Настройка кодов ошибок для стратегий
+error:
+  strategies:
+    badRequest: 400
+    forbidden: 403
+    notFound: 404
+    conflict: 409
+    internalServerError: 500
+
 # Cloud Messages - Сообщения об ошибках
 error.subscription.fetch.invalid.request: "Некорректный запрос при получении данных о подписках для пользователя: {customerId}"
 error.subscription.fetch.forbidden: "Подписки недоступны для текущего пользователя: {customerId}. Доступ запрещен."

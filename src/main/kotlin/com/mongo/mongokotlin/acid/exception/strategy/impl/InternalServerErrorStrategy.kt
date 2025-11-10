@@ -1,5 +1,6 @@
 package com.mongo.mongokotlin.acid.exception.strategy.impl
 
+import com.mongo.mongokotlin.acid.config.properties.ErrorStrategiesProperties
 import com.mongo.mongokotlin.acid.exception.BusinessException
 import com.mongo.mongokotlin.acid.exception.LogicErrorCode
 import com.mongo.mongokotlin.acid.exception.strategy.ErrorHandlingStrategy
@@ -7,12 +8,15 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 
 /**
- * Стратегия обработки ошибки 500 Internal Server Error
+ * Стратегия обработки ошибки Internal Server Error
+ * HTTP код читается из ErrorStrategiesProperties
  */
 @Component
-class InternalServerErrorStrategy : ErrorHandlingStrategy {
+class InternalServerErrorStrategy(
+    private val properties: ErrorStrategiesProperties
+) : ErrorHandlingStrategy {
     
-    override fun getStatusCode(): Int = 500
+    override fun getStatusCode(): Int = properties.internalServerError
     
     override fun buildException(cause: Throwable, params: Map<String, String>): BusinessException {
         return BusinessException.builder()
