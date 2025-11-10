@@ -3,18 +3,20 @@ package com.mongo.mongokotlin.acid.domain.service.subscriptionfetch
 import com.mongo.mongokotlin.acid.domain.dto.subscriptionfetch.SubscriptionListResponseDto
 import com.mongo.mongokotlin.acid.exception.BusinessException
 import com.mongo.mongokotlin.acid.exception.LogicErrorCode
+import com.mongo.mongokotlin.acid.exception.strategy.ErrorHandlingStrategy
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 
 /**
  * Сервис для получения подписок клиента через внешний сервис
- * Обрабатывает различные ошибки и предоставляет удобный API для контроллера
- * Использует suspend функции для работы с корутинами
+ * Обрабатывает различные ошибки используя паттерн Strategy
+ * Spring IoC автоматически инжектит Map<Int, ErrorHandlingStrategy>
  */
 @Service
 class SubscriptionFetchService(
-    private val externalClient: ExternalSubscriptionClient
+    private val externalClient: ExternalSubscriptionClient,
+    private val errorStrategyMap: Map<Int, ErrorHandlingStrategy>
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     
@@ -51,56 +53,31 @@ class SubscriptionFetchService(
     
     /**
      * Обработка ошибок от внешнего сервиса
-     * Конструирует BusinessException с правильным кодом ошибки и параметрами
+     * Использует паттерн Strategy + Spring IoC Map для построения BusinessException
+     * 
+     * @param ex исключение от внешнего сервиса
+     * @param customerId ID клиента для параметров сообщения
+     * @return BusinessException с правильным кодом ошибки и параметрами
      */
     private fun handleExternalServiceError(
         ex: ExternalServiceException,
         customerId: String
     ): BusinessException {
-        log.warn("Обработка ошибки {} для клиента {}", ex.statusCode, customerId)
+        log.warn("⚠️ Обработка ошибки {} для клиента {}", ex.statusCode, customerId)
         
-        return when (ex.statusCode) {
-            400 -> BusinessException.builder()
-                .errorCode(LogicErrorCode.INVALID_REQUEST_FETCH_SUBSCRIPTIONS)
-                .httpCode(HttpStatus.BAD_REQUEST)
-                .params("customerId" to customerId)
-                .logLevel(BusinessException.LogLevel.WARN)
-                .cause(ex)
-                .build()
-            
-            403 -> BusinessException.builder()
-                .errorCode(LogicErrorCode.FORBIDDEN_ACCESS_SUBSCRIPTIONS)
-                .httpCode(HttpStatus.FORBIDDEN)
-                .params("customerId" to customerId)
-                .logLevel(BusinessException.LogLevel.WARN)
-                .cause(ex)
-                .build()
-            
-            404 -> BusinessException.builder()
-                .errorCode(LogicErrorCode.CUSTOMER_NOT_FOUND_IN_EXTERNAL_SERVICE)
-                .httpCode(HttpStatus.NOT_FOUND)
-                .params("customerId" to customerId)
-                .logLevel(BusinessException.LogLevel.WARN)
-                .cause(ex)
-                .build()
-            
-            409 -> BusinessException.builder()
-                .errorCode(LogicErrorCode.SUBSCRIPTIONS_TEMPORARILY_UNAVAILABLE)
-                .httpCode(HttpStatus.CONFLICT)
-                .params("customerId" to customerId)
-                .logLevel(BusinessException.LogLevel.WARN)
-                .cause(ex)
-                .build()
-            
-            500 -> BusinessException.builder()
-                .errorCode(LogicErrorCode.EXTERNAL_SERVICE_INTERNAL_ERROR)
-                .httpCode(HttpStatus.INTERNAL_SERVER_ERROR)
-                .params("customerId" to customerId)
-                .logLevel(BusinessException.LogLevel.WARN)
-                .cause(ex)
-                .build()
-            
-            else -> BusinessException.builder()
+        // Получаем стратегию из Map (Spring IoC автоматически инжектит Map)
+        val strategy = errorStrategyMap[ex.statusCode]
+        
+        // Если стратегия найдена - используем её
+        return if (strategy != null) {
+            strategy.buildException(
+                cause = ex,
+                params = mapOf("customerId" to customerId)
+            )
+        } else {
+            // Если не найдена - строим дефолтную ошибку
+            log.warn("⚠️ Стратегия для HTTP {} не найдена, используется UNKNOWN", ex.statusCode)
+            BusinessException.builder()
                 .errorCode(LogicErrorCode.UNKNOWN_EXTERNAL_SERVICE_ERROR)
                 .httpCode(HttpStatus.BAD_GATEWAY)
                 .params("customerId" to customerId)
