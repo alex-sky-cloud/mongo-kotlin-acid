@@ -4,6 +4,7 @@
       "subscriptionId": "sub-001",
       "customerId": "customer-success",
       "productId": "premium-monthly",
+      "offerId": "offer-001",
       "status": "ACTIVE",
       "startDate": "2024-01-01T00:00:00",
       "endDate": "2025-01-01T00:00:00",
@@ -14,6 +15,7 @@
       "subscriptionId": "sub-002",
       "customerId": "customer-success",
       "productId": "basic-yearly",
+      "offerId": "offer-002",
       "status": "ACTIVE",
       "startDate": "2024-06-15T00:00:00",
       "endDate": "2025-06-15T00:00:00",
@@ -24,6 +26,7 @@
       "subscriptionId": "sub-003",
       "customerId": "customer-success",
       "productId": "enterprise-monthly",
+      "offerId": "offer-003",
       "status": "PENDING",
       "startDate": "2024-11-01T00:00:00",
       "endDate": "2024-12-01T00:00:00",
@@ -34,4 +37,5 @@
   "total": 3,
   "message": "Подписки успешно получены"
 }
+
 

@@ -11,3 +11,4 @@ import org.springframework.context.annotation.Configuration
 @EnableConfigurationProperties(ErrorStrategiesProperties::class)
 class PropertiesConfig
 
+

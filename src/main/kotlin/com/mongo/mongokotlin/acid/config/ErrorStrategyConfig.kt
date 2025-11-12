@@ -26,19 +26,24 @@ class ErrorStrategyConfig {
      * Spring автоматически инжектит все реализации ErrorHandlingStrategy
      * и собирает их в Map где ключ = statusCode, значение = стратегия
      * 
-     * @param strategies список всех ErrorHandlingStrategy бинов (автоинжекция Spring)
+     * @param strategies Set всех ErrorHandlingStrategy бинов (автоинжекция Spring)
      * @return Map<Int, ErrorHandlingStrategy> для использования в сервисах
      */
     @Bean
-    fun errorStrategyMap(strategies: List<ErrorHandlingStrategy>): Map<Int, ErrorHandlingStrategy> {
+    fun errorStrategyMap(strategies: Set<ErrorHandlingStrategy>): Map<Int, ErrorHandlingStrategy> {
         log.info("🔧 Регистрация стратегий обработки ошибок в Map...")
         
         val strategyMap = strategies.stream()
             .collect(
                 Collectors.toMap(
-                    { strategy -> strategy.getStatusCode() },  // keyMapper: statusCode
-                    { strategy -> strategy },                   // valueMapper: сама стратегия
-                    { existing, _ -> existing }                 // mergeFunction: при конфликте оставляем первую
+                    { strategy -> strategy.getStatusCode() },  // keyMapper: HTTP код как ключ (400, 403, 404...)
+                    { strategy -> strategy },                   // valueMapper: стратегия как значение
+                    { existing, duplicate ->  // mergeFunction: fail-fast при дубликатах
+                        throw IllegalStateException(
+                            "Duplicate error strategy for HTTP ${existing.getStatusCode()}: " +
+                            "${existing.javaClass.simpleName} and ${duplicate.javaClass.simpleName}"
+                        )
+                    }
                 )
             )
         

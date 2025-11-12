@@ -131,10 +131,10 @@ class ErrorStrategyIntegrationTest {
     fun `BadRequestErrorStrategy должна строить правильное исключение`() {
         // Given
         val cause = RuntimeException("Test error")
-        val params = mapOf("customerId" to "test-customer-123")
+        val context = com.mongo.mongokotlin.acid.exception.ErrorContext(customerId = "test-customer-123")
 
         // When
-        val exception = badRequestStrategy.buildException(cause, params)
+        val exception = badRequestStrategy.buildException(cause, context)
 
         // Then
         assertNotNull(exception)
@@ -148,10 +148,10 @@ class ErrorStrategyIntegrationTest {
     fun `ForbiddenErrorStrategy должна строить правильное исключение`() {
         // Given
         val cause = RuntimeException("Test error")
-        val params = mapOf("customerId" to "test-customer-456")
+        val context = com.mongo.mongokotlin.acid.exception.ErrorContext(customerId = "test-customer-456")
 
         // When
-        val exception = forbiddenStrategy.buildException(cause, params)
+        val exception = forbiddenStrategy.buildException(cause, context)
 
         // Then
         assertNotNull(exception)
@@ -164,10 +164,10 @@ class ErrorStrategyIntegrationTest {
     fun `NotFoundErrorStrategy должна строить правильное исключение`() {
         // Given
         val cause = RuntimeException("Test error")
-        val params = mapOf("customerId" to "test-customer-789")
+        val context = com.mongo.mongokotlin.acid.exception.ErrorContext(customerId = "test-customer-789")
 
         // When
-        val exception = notFoundStrategy.buildException(cause, params)
+        val exception = notFoundStrategy.buildException(cause, context)
 
         // Then
         assertNotNull(exception)
@@ -180,10 +180,10 @@ class ErrorStrategyIntegrationTest {
     fun `ConflictErrorStrategy должна строить правильное исключение`() {
         // Given
         val cause = RuntimeException("Test error")
-        val params = mapOf("customerId" to "test-customer-111")
+        val context = com.mongo.mongokotlin.acid.exception.ErrorContext(customerId = "test-customer-111")
 
         // When
-        val exception = conflictStrategy.buildException(cause, params)
+        val exception = conflictStrategy.buildException(cause, context)
 
         // Then
         assertNotNull(exception)
@@ -196,10 +196,10 @@ class ErrorStrategyIntegrationTest {
     fun `InternalServerErrorStrategy должна строить правильное исключение`() {
         // Given
         val cause = RuntimeException("Test error")
-        val params = mapOf("customerId" to "test-customer-222")
+        val context = com.mongo.mongokotlin.acid.exception.ErrorContext(customerId = "test-customer-222")
 
         // When
-        val exception = internalServerErrorStrategy.buildException(cause, params)
+        val exception = internalServerErrorStrategy.buildException(cause, context)
 
         // Then
         assertNotNull(exception)

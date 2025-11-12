@@ -11,6 +11,7 @@
 7. [Добавление новой ошибки](#добавление-новой-ошибки)
 8. [Интеграционные тесты](#интеграционные-тесты)
 9. [Преимущества подхода](#преимущества-подхода)
+10. [Дополнительная документация](#дополнительная-документация)
 
 ---
 
@@ -234,91 +235,67 @@ stop
 skinparam backgroundColor #FEFEFE
 skinparam componentStyle rectangle
 
-component "application.yml" as yml
-note right of yml
-  error:
-    strategies:
-      badRequest: 400
-      forbidden: 403
-      notFound: 404
-      conflict: 409
-      internalServerError: 500
-end note
+rectangle "application.yml" as yml #LightYellow {
+  note as ymlNote
+    error:
+      strategies:
+        badRequest: 400
+        forbidden: 403
+        notFound: 404
+  end note
+}
 
-yml -down-> props
+rectangle "ErrorStrategiesProperties\n<<@ConfigurationProperties>>" as properties #LightBlue
 
-component "ErrorStrategiesProperties\n<<@ConfigurationProperties>>" as props
-note right of props
-  Spring читает yml
-  и биндит значения
-end note
+rectangle "PropertiesConfig\n<<@Configuration>>" as pconf #LightGreen
 
-props -down-> pconf
+rectangle "ErrorHandlingStrategy\n<<interface>>" as iface #LightGray
 
-component "PropertiesConfig\n<<@Configuration>>" as pconf
+rectangle "Стратегии" as strategies #Lavender {
+  component "BadRequestErrorStrategy" as s400
+  component "ForbiddenErrorStrategy" as s403
+  component "NotFoundErrorStrategy" as s404
+  component "ConflictErrorStrategy" as s409
+  component "InternalServerErrorStrategy" as s500
+}
 
-pconf -down-> iface
+rectangle "ErrorStrategyConfig\n<<@Configuration>>" as conf #LightGreen
 
-component "ErrorHandlingStrategy\n<<interface>>" as iface
-note right of iface
-  Интерфейс стратегии:
-  - getStatusCode()
-  - buildException()
-end note
+rectangle "Map<Int, Strategy>\n<<@Bean>>" as strategyMap #LightCyan
 
-iface -down-> s400
+rectangle "SubscriptionFetchService\n<<@Service>>" as service #Pink
 
-component "BadRequestErrorStrategy\n<<@Component>>" as s400
-component "ForbiddenErrorStrategy\n<<@Component>>" as s403
-component "NotFoundErrorStrategy\n<<@Component>>" as s404
-component "ConflictErrorStrategy\n<<@Component>>" as s409
-component "InternalServerErrorStrategy\n<<@Component>>" as s500
+yml -down-> properties : "биндинг"
+properties -down-> pconf : "активация"
+pconf -down-> iface : "определяет"
+iface -down-> strategies : "реализуют"
+properties .right.> strategies : "инжектится"
+strategies -down-> conf : "собираются"
+conf -down-> strategyMap : "создаёт"
+strategyMap -down-> service : "инжектится"
 
-props .> s400
-props .> s403
-props .> s404
-props .> s409
-props .> s500
-
-s400 -down-> conf
-s403 -down-> conf
-s404 -down-> conf
-s409 -down-> conf
-s500 -down-> conf
-
-component "ErrorStrategyConfig\n<<@Configuration>>" as conf
-note right of conf
-  Собирает все стратегии
-  в Map<Int, Strategy>
-end note
-
-conf -down-> map
-
-component "Map<Int, Strategy>\n<<@Bean>>" as map
-note right of map
+note right of strategyMap
   Spring IoC:
-  1. Находит @Component
+  1. Находит все @Component
   2. Собирает в List
-  3. Config -> Map
+  3. Config создаёт Map
   
-  Map содержит:
-  400 -> BadRequest
-  403 -> Forbidden
-  404 -> NotFound
-  409 -> Conflict
-  500 -> InternalServer
+  Map: {
+    400 -> BadRequest,
+    403 -> Forbidden,
+    404 -> NotFound,
+    409 -> Conflict,
+    500 -> InternalServer
+  }
 end note
 
-map -down-> service
-
-component "SubscriptionFetchService\n<<@Service>>" as service
 note right of service
-  Использует Map:
+  Использует стратегию:
   
   val strategy = 
     errorStrategyMap[code]
   
-  strategy.buildException()
+  strategy?.buildException()
 end note
 
 @enduml
@@ -709,16 +686,32 @@ class GoneErrorStrategy(
     override fun getStatusCode(): Int = properties.gone  // ✅ Из конфига
     
     override fun buildException(cause: Throwable, params: Map<String, String>): BusinessException {
+        // ✅ Стратегия сама выбирает какие параметры использовать
+        // Доступны: customerId, statusCode, statusMessage, responseBody
         return BusinessException.builder()
             .errorCode(LogicErrorCode.RESOURCE_GONE)
             .httpCode(HttpStatus.GONE)
-            .params(*params.map { it.key to it.value }.toTypedArray())
+            .params(*params.map { it.key to it.value }.toTypedArray())  // Используем все
             .logLevel(BusinessException.LogLevel.WARN)
-            .cause(ex)
+            .cause(cause)
             .build()
     }
 }
 ```
+
+**Примечание:** В `params` передаётся полный контекст:
+```kotlin
+params = mapOf(
+    "customerId" to "...",
+    "statusCode" to "...",
+    "statusMessage" to "...",
+    "responseBody" to "..."
+)
+```
+
+Каждая стратегия может:
+- Использовать все параметры: `.params(*params.map {...}.toTypedArray())`
+- Выбрать только нужные: `.params("customerId" to params["customerId"]!!)`
 
 #### Шаг 5: Готово! ✅
 
@@ -1136,8 +1129,21 @@ errorStrategyMap[statusCode].buildException()
 
 ---
 
-**Дата:** 2025-11-10  
-**Версия:** 1.0  
+## Дополнительная документация
+
+Для углублённого изучения механизмов Spring DI и Multi-Implementation:
+
+📄 **[SPRING-DI-MULTI-IMPLEMENTATION.md](./SPRING-DI-MULTI-IMPLEMENTATION.md)** - Подробное объяснение:
+- Как Spring находит и создаёт множественные реализации интерфейса
+- Механизм инжекции `List<Interface>` и преобразования в `Map`
+- Как Spring понимает, какую реализацию куда инжектить
+- Жизненный цикл бинов и порядок их создания
+- Примеры из текущего проекта с кодом и диаграммами
+
+---
+
+**Дата:** 2025-11-12  
+**Версия:** 1.1  
 **Авторы:** Architecture Team  
 **Паттерны:** Strategy + IoC + ConfigurationProperties
 

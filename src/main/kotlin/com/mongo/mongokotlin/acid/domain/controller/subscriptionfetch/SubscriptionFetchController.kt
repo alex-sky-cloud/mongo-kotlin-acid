@@ -52,7 +52,6 @@ class SubscriptionFetchController(
             throw BusinessException.builder()
                 .errorCode(LogicErrorCode.MISSING_AUTH_USER_ID_HEADER)
                 .httpCode(HttpStatus.BAD_REQUEST)
-                .params("headerName" to CUSTOMER_ID_HEADER)
                 .logLevel(BusinessException.LogLevel.WARN)
                 .build()
         }

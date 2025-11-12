@@ -395,3 +395,4 @@ src/main/resources/
 **Статус:** ✅ Реализовано  
 **Паттерны:** Strategy + IoC + Registry
 
+

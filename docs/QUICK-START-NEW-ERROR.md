@@ -71,3 +71,4 @@ Spring автоматически:
 
 📖 **Подробная документация:** [ERROR-HANDLING-ARCHITECTURE.md](ERROR-HANDLING-ARCHITECTURE.md)
 
+

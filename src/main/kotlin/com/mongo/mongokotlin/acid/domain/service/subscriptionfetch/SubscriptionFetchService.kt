@@ -2,6 +2,7 @@ package com.mongo.mongokotlin.acid.domain.service.subscriptionfetch
 
 import com.mongo.mongokotlin.acid.domain.dto.subscriptionfetch.SubscriptionListResponseDto
 import com.mongo.mongokotlin.acid.exception.BusinessException
+import com.mongo.mongokotlin.acid.exception.ErrorContext
 import com.mongo.mongokotlin.acid.exception.LogicErrorCode
 import com.mongo.mongokotlin.acid.exception.strategy.ErrorHandlingStrategy
 import org.slf4j.LoggerFactory
@@ -24,9 +25,15 @@ class SubscriptionFetchService(
      * Получить список подписок для клиента
      * 
      * @param customerId ID клиента
+     * @param offerId ID предложения (опционально)
+     * @param publicGatewayId ID платежного шлюза (опционально)
      * @return список подписок
      */
-    suspend fun getCustomerSubscriptions(customerId: String): SubscriptionListResponseDto {
+    suspend fun getCustomerSubscriptions(
+        customerId: String,
+        offerId: String? = null,
+        publicGatewayId: String? = null
+    ): SubscriptionListResponseDto {
         log.info("Получение подписок для клиента: {}", customerId)
         
         return try {
@@ -38,16 +45,18 @@ class SubscriptionFetchService(
                 "Ошибка внешнего сервиса при получении подписок. Код: {}, Сообщение: {}",
                 ex.statusCode, ex.statusMessage
             )
-            throw handleExternalServiceError(ex, customerId)
-        } catch (ex: Exception) {
-            log.error("Непредвиденная ошибка при получении подписок для клиента: {}", customerId, ex)
-            throw BusinessException.builder()
-                .errorCode(LogicErrorCode.UNEXPECTED_ERROR)
-                .httpCode(HttpStatus.INTERNAL_SERVER_ERROR)
-                .params("customerId" to customerId, "details" to (ex.message ?: ""))
-                .logLevel(BusinessException.LogLevel.ERROR)
-                .cause(ex)
-                .build()
+            
+            // Собираем все доступные бизнес-данные в блоке catch
+            val context = ErrorContext(
+                customerId = customerId,
+                offerId = offerId,
+                publicGatewayId = publicGatewayId,
+                statusCode = ex.statusCode,
+                statusMessage = ex.statusMessage,
+                responseBody = ex.responseBody
+            )
+            
+            throw handleExternalServiceError(ex, context)
         }
     }
     
@@ -56,14 +65,14 @@ class SubscriptionFetchService(
      * Использует паттерн Strategy + Spring IoC Map для построения BusinessException
      * 
      * @param ex исключение от внешнего сервиса
-     * @param customerId ID клиента для параметров сообщения
+     * @param context контекст с бизнес-данными для формирования сообщения об ошибке
      * @return BusinessException с правильным кодом ошибки и параметрами
      */
     private fun handleExternalServiceError(
         ex: ExternalServiceException,
-        customerId: String
+        context: ErrorContext
     ): BusinessException {
-        log.warn("⚠️ Обработка ошибки {} для клиента {}", ex.statusCode, customerId)
+        log.warn("⚠️ Обработка ошибки {} для клиента {}", ex.statusCode, context.customerId)
         
         // Получаем стратегию из Map (Spring IoC автоматически инжектит Map)
         val strategy = errorStrategyMap[ex.statusCode]
@@ -72,7 +81,7 @@ class SubscriptionFetchService(
         return if (strategy != null) {
             strategy.buildException(
                 cause = ex,
-                params = mapOf("customerId" to customerId)
+                context = context
             )
         } else {
             // Если не найдена - строим дефолтную ошибку
@@ -80,7 +89,7 @@ class SubscriptionFetchService(
             BusinessException.builder()
                 .errorCode(LogicErrorCode.UNKNOWN_EXTERNAL_SERVICE_ERROR)
                 .httpCode(HttpStatus.BAD_GATEWAY)
-                .params("customerId" to customerId)
+                .params("customerId" to context.customerId!!)
                 .logLevel(BusinessException.LogLevel.WARN)
                 .cause(ex)
                 .build()

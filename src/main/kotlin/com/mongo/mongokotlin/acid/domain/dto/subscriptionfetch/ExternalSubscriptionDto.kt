@@ -9,6 +9,7 @@ data class ExternalSubscriptionDto(
     val subscriptionId: String,
     val customerId: String,
     val productId: String,
+    val offerId: String,
     val status: String,
     val startDate: LocalDateTime,
     val endDate: LocalDateTime,

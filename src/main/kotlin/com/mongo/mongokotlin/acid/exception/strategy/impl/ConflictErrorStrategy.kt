@@ -2,6 +2,7 @@ package com.mongo.mongokotlin.acid.exception.strategy.impl
 
 import com.mongo.mongokotlin.acid.config.properties.ErrorStrategiesProperties
 import com.mongo.mongokotlin.acid.exception.BusinessException
+import com.mongo.mongokotlin.acid.exception.ErrorContext
 import com.mongo.mongokotlin.acid.exception.LogicErrorCode
 import com.mongo.mongokotlin.acid.exception.strategy.ErrorHandlingStrategy
 import org.springframework.http.HttpStatus
@@ -18,11 +19,12 @@ class ConflictErrorStrategy(
     
     override fun getStatusCode(): Int = properties.conflict
     
-    override fun buildException(cause: Throwable, params: Map<String, String>): BusinessException {
+    override fun buildException(cause: Throwable, context: ErrorContext): BusinessException {
+        // Достаём только нужные параметры из контекста
         return BusinessException.builder()
             .errorCode(LogicErrorCode.SUBSCRIPTIONS_TEMPORARILY_UNAVAILABLE)
             .httpCode(HttpStatus.CONFLICT)
-            .params(*params.map { it.key to it.value }.toTypedArray())
+            .params("customerId" to context.customerId!!)
             .logLevel(BusinessException.LogLevel.WARN)
             .cause(cause)
             .build()

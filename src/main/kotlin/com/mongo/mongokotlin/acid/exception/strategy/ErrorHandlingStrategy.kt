@@ -1,6 +1,7 @@
 package com.mongo.mongokotlin.acid.exception.strategy
 
 import com.mongo.mongokotlin.acid.exception.BusinessException
+import com.mongo.mongokotlin.acid.exception.ErrorContext
 
 /**
  * Интерфейс стратегии для обработки ошибок внешнего сервиса
@@ -21,9 +22,9 @@ interface ErrorHandlingStrategy {
      * Построить BusinessException для данной ошибки
      * 
      * @param cause исходное исключение от внешнего сервиса
-     * @param params параметры для сообщения об ошибке
+     * @param context контекст с nullable полями - каждая стратегия выбирает нужные
      * @return готовое BusinessException
      */
-    fun buildException(cause: Throwable, params: Map<String, String>): BusinessException
+    fun buildException(cause: Throwable, context: ErrorContext): BusinessException
 }
 

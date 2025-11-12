@@ -15,3 +15,4 @@ data class ErrorStrategiesProperties(
     val internalServerError: Int = 500
 )
 
+

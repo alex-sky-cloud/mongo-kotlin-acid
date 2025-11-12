@@ -30,11 +30,13 @@ error:
     internalServerError: 500
 
 # Cloud Messages - Сообщения об ошибках
-error.subscription.fetch.invalid.request: "Некорректный запрос при получении данных о подписках для пользователя: {customerId}"
-error.subscription.fetch.forbidden: "Подписки недоступны для текущего пользователя: {customerId}. Доступ запрещен."
-error.subscription.fetch.customer.not.found: "Клиент с идентификатором {customerId} не найден во внешнем сервисе подписок"
-error.subscription.fetch.temporarily.unavailable: "Подписки для пользователя {customerId} временно недоступны. Повторите запрос позже."
-error.subscription.fetch.external.service.error: "Внутренняя ошибка внешнего сервиса при получении подписок для пользователя: {customerId}"
-error.subscription.fetch.unknown.error: "Неизвестная ошибка внешнего сервиса при получении подписок для пользователя: {customerId}"
-error.auth.missing.user.id.header: "Отсутствует обязательный заголовок: {headerName} для получения подписок"
-error.unexpected: "Непредвиденная ошибка при выполнении операции для пользователя: {customerId}. {details}"
+error.subscription.fetch.invalid.request: "При получении подписок для пользователя с customerId: {customerId}, были введены некорректные данные."
+error.subscription.fetch.forbidden: "Пользователь с customerId: {customerId}, не может получить подписки."
+error.subscription.fetch.customer.not.found: "Пользователь с customerId: {customerId}, не найден во внешнем сервисе подписок."
+error.subscription.fetch.temporarily.unavailable: "Получение подписок для пользователя с customerId: {customerId}, временно недоступно."
+error.subscription.fetch.external.service.error: "Получение подписок для пользователя с customerId: {customerId}, невозможно, так как внешний сервис недоступен."
+error.subscription.fetch.unknown.error: "Получение подписок для пользователя с customerId: {customerId}, невозможно из-за неизвестной ошибки внешнего сервиса."
+error.subscription.fetch.offer.not.found: "Предложение о покупке подписки по offerId: {offerId}, не найдено для пользователя с customerId: {customerId}."
+error.subscription.fetch.adapter.not.available: "Покупка подписки по offerId: {offerId}, невозможна, так как payment adapter по publicGatewayId: {publicGatewayId}, не доступен для пользователя с customerId: {customerId}."
+error.auth.missing.user.id.header: "Отсутствует идентификатор пользователя для получения подписок."
+error.unexpected: "Непредвиденная ошибка при получении подписок для пользователя с customerId: {customerId}."
