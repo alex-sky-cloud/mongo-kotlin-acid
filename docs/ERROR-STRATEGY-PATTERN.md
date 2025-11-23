@@ -396,3 +396,5 @@ src/main/resources/
 **Паттерны:** Strategy + IoC + Registry
 
 
+
+

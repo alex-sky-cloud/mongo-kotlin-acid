@@ -73,7 +73,7 @@ class SubscriptionFetchService(
         context: ErrorContext
     ): BusinessException {
         log.warn("⚠️ Обработка ошибки {} для клиента {}", ex.statusCode, context.customerId)
-        
+         
         // Получаем стратегию из Map (Spring IoC автоматически инжектит Map)
         val strategy = errorStrategyMap[ex.statusCode]
         
